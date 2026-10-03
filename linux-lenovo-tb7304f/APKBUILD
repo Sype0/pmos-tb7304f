@@ -1,0 +1,22 @@
+# Stock kernel from TB-7304F_S100017_200102_ROW, used as is: there is no
+# kernel source for this board and the Wi-Fi driver only exists downstream.
+pkgname=linux-lenovo-tb7304f
+pkgver=4.4.22
+pkgrel=0
+pkgdesc="Lenovo Tab 7 Essential stock kernel (prebuilt)"
+arch="aarch64"
+_flavor="lenovo-tb7304f"
+_krel="4.4.22+"
+url="https://kernel.org"
+license="GPL-2.0-only"
+options="!check !strip !tracedeps !archcheck"
+source="kernel"
+
+package() {
+	install -Dm644 "$srcdir"/kernel "$pkgdir"/boot/vmlinuz
+	mkdir -p "$pkgdir"/lib/modules/$_krel
+	install -D /dev/null "$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+	echo "$_krel" > "$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+sha512sums=""

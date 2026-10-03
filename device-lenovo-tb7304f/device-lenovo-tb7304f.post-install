@@ -1,0 +1,3 @@
+#!/bin/sh
+rc-update add tb7304f-mdev sysinit
+exit 0

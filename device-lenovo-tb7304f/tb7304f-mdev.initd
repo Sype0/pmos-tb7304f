@@ -1,0 +1,19 @@
+#!/sbin/openrc-run
+
+# The stock kernel has no devtmpfs, so nothing creates device nodes for
+# devices that show up after the initramfs. mdev does that here.
+description="Create device nodes with mdev (kernel without devtmpfs)"
+command="/bin/busybox"
+command_args="mdev -df"
+command_background="true"
+pidfile="/run/tb7304f-mdev.pid"
+
+depend() {
+	need sysfs
+	before udev udev-trigger
+}
+
+start_pre() {
+	grep -q devtmpfs /proc/filesystems && return 1
+	/bin/busybox mdev -s
+}

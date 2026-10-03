@@ -1,0 +1,68 @@
+# Builds a postmarketOS image for the Lenovo TB-7304F with pmbootstrap
+name: Build postmarketOS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+env:
+  DEVICE: lenovo-tb7304f
+  PMAPORTS: /home/runner/.local/var/pmbootstrap/cache_git/pmaports
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out the device packages
+        uses: actions/checkout@v4
+
+      - name: Install pmbootstrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends kpartx
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          git clone --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ~/pmbootstrap
+          mkdir -p ~/.local/bin
+          ln -s ~/pmbootstrap/pmbootstrap.py ~/.local/bin/pmbootstrap
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up pmbootstrap
+        run: |
+          set +o pipefail
+          yes "" | pmbootstrap --details-to-stdout init
+          set -o pipefail
+          test -d "$PMAPORTS/device/testing"
+          cp -r "device-$DEVICE" "linux-$DEVICE" "$PMAPORTS/device/testing/"
+          python3 tools/patch-initramfs.py "$PMAPORTS/main/postmarketos-initramfs"
+          pmbootstrap config device "$DEVICE"
+          pmbootstrap config ui console
+          pmbootstrap config systemd never
+          pmbootstrap config hostname tb7304f
+          pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE" postmarketos-initramfs
+          pmbootstrap config
+
+      - name: Build the image
+        run: pmbootstrap --details-to-stdout install --password 147147
+
+      - name: Collect the output
+        run: |
+          pmbootstrap --details-to-stdout export "$RUNNER_TEMP/export"
+          ls -lL "$RUNNER_TEMP/export"
+          mkdir dist
+          cp -vL "$RUNNER_TEMP/export/boot.img" dist/boot.img
+          cp -vL "$RUNNER_TEMP/export/$DEVICE.img" dist/rootfs.img
+          size=$(stat -c %s dist/boot.img)
+          echo "boot.img: $size / 16777216 bytes"
+          [ "$size" -le 16777216 ] || { echo "boot.img does not fit the boot partition"; exit 1; }
+          xz -T0 -3 dist/rootfs.img
+          (cd dist && sha256sum * | tee sha256sums.txt)
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmarketos-lenovo-tb7304f
+          path: dist/*
