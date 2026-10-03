@@ -46,7 +46,10 @@ jobs:
           pmbootstrap config
 
       - name: Build the image
-        run: pmbootstrap --details-to-stdout install --password 147147
+        run: |
+          # install takes the initramfs from the binary repository otherwise
+          pmbootstrap --details-to-stdout build --arch aarch64 postmarketos-initramfs
+          pmbootstrap --details-to-stdout install --password 147147
 
       - name: Collect the output
         run: |
