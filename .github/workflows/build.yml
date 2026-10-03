@@ -40,7 +40,7 @@ jobs:
           python3 tools/patch-initramfs.py "$PMAPORTS/main/postmarketos-initramfs"
           pmbootstrap config device "$DEVICE"
           pmbootstrap config ui console
-          pmbootstrap config systemd never
+          pmbootstrap config service_manager openrc
           pmbootstrap config hostname tb7304f
           pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE" postmarketos-initramfs
           pmbootstrap config
