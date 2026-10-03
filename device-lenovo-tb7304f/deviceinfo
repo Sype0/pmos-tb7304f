@@ -29,5 +29,5 @@ deviceinfo_flash_offset_ramdisk="0x04488000"
 deviceinfo_flash_offset_second="0x00f00000"
 deviceinfo_flash_offset_tags="0x0df88000"
 deviceinfo_flash_sparse="true"
-# boot is 16 MiB and the kernel takes 7.5 MiB of it
+# boot is 16 MiB and the kernel takes 7.5 MiB of it ("lzma" produces xz)
 deviceinfo_initfs_compression="lzma"

@@ -42,6 +42,8 @@ jobs:
           pmbootstrap config ui console
           pmbootstrap config service_manager openrc
           pmbootstrap config hostname tb7304f
+          # Stops in the initramfs with a telnet shell on 172.16.42.1 until the port boots
+          pmbootstrap config extra_packages postmarketos-mkinitfs-hook-debug-shell
           pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE" postmarketos-initramfs
           pmbootstrap config
 
