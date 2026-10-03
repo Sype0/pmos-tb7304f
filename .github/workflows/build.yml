@@ -15,6 +15,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: write
 
     steps:
       - name: Check out the device packages
@@ -23,7 +25,7 @@ jobs:
       - name: Install pmbootstrap
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends kpartx
+          sudo apt-get install -y --no-install-recommends kpartx android-sdk-libsparse-utils zip
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           git clone --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ~/pmbootstrap
           mkdir -p ~/.local/bin
@@ -42,8 +44,6 @@ jobs:
           pmbootstrap config ui console
           pmbootstrap config service_manager openrc
           pmbootstrap config hostname tb7304f
-          # Stops in the initramfs with a telnet shell on 172.16.42.1 until the port boots
-          pmbootstrap config extra_packages postmarketos-mkinitfs-hook-debug-shell
           pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE" postmarketos-initramfs
           pmbootstrap config
 
@@ -63,7 +63,21 @@ jobs:
           size=$(stat -c %s dist/boot.img)
           echo "boot.img: $size / 16777216 bytes"
           [ "$size" -le 16777216 ] || { echo "boot.img does not fit the boot partition"; exit 1; }
-          xz -T0 -3 dist/rootfs.img
+          # TWRP flashable zip: raw (not sparse) root filesystem for userdata + boot.img
+          mkdir zip
+          cp -r installer/META-INF zip/
+          cp dist/boot.img zip/boot.img
+          simg2img dist/rootfs.img zip/rootfs.img
+          rm dist/rootfs.img
+          for f in boot rootfs; do
+            bytes=$(stat -c %s "zip/$f.img")
+            [ $((bytes % 2048)) = 0 ] || { echo "$f.img size is not a multiple of 2048"; exit 1; }
+            name=$(echo "$f" | tr a-z A-Z)
+            echo "${name}_BYTES=$bytes" >> zip/installer.conf
+            echo "${name}_SHA256=$(sha256sum "zip/$f.img" | cut -d ' ' -f 1)" >> zip/installer.conf
+          done
+          cat zip/installer.conf
+          (cd zip && zip -r -6 "../dist/postmarketos-$DEVICE-twrp.zip" META-INF installer.conf boot.img rootfs.img)
           (cd dist && sha256sum * | tee sha256sums.txt)
 
       - name: Upload the artifacts
@@ -71,3 +85,14 @@ jobs:
         with:
           name: postmarketos-lenovo-tb7304f
           path: dist/*
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "postmarketOS for TB-7304F (build ${{ github.run_number }})" \
+            --notes "Untested on the device. Flashing the zip in TWRP overwrites userdata (all Android data) and boot. Stock boot, nvram, proinfo and /data/nvram are saved to /cache/pmos-backup first. The zip must not be on internal storage: use adb sideload or a microSD card. Login: user / 147147."

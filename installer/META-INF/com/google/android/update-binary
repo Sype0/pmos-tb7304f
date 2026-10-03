@@ -1,0 +1,96 @@
+#!/sbin/sh
+# postmarketOS installer for the Lenovo TB-7304F, run by TWRP.
+# Overwrites userdata (root filesystem) and boot. Stock boot, nvram, proinfo
+# and /data/nvram are saved to /cache/pmos-backup first.
+
+OUTFD=$2
+ZIP=$3
+BY=/dev/block/platform/bootdevice/by-name
+BACKUP=/cache/pmos-backup
+
+ui_print() {
+	echo "ui_print $1" > /proc/self/fd/$OUTFD
+	echo "ui_print" > /proc/self/fd/$OUTFD
+}
+
+abort() {
+	ui_print "ERROR: $1"
+	exit 1
+}
+
+mounted() {
+	grep -q " $1 " /proc/mounts
+}
+
+# save_part <partition> <file>: keeps an existing backup, it is the stock one
+save_part() {
+	[ -s "$BACKUP/$2" ] && { ui_print "- $2 already saved, keeping it"; return; }
+	ui_print "- Saving $1 to $BACKUP/$2"
+	dd if="$BY/$1" of="$BACKUP/$2.tmp" bs=1048576 || abort "could not read $1"
+	[ "$(stat -c %s "$BACKUP/$2.tmp")" = "$(blockdev --getsize64 "$BY/$1")" ] ||
+		abort "backup of $1 is incomplete, is /cache full?"
+	mv "$BACKUP/$2.tmp" "$BACKUP/$2"
+}
+
+# write_image <file in zip> <partition> <bytes> <sha256>
+write_image() {
+	[ $(($3 % 2048)) = 0 ] || abort "$1 size is not a multiple of 2048"
+	[ "$(blockdev --getsize64 "$BY/$2")" -ge "$3" ] || abort "$1 does not fit $2"
+	ui_print "- Writing $1 to $2"
+	unzip -p "$ZIP" "$1" | dd of="$BY/$2" bs=1048576
+	sync
+	ui_print "- Verifying $2"
+	sum=$(dd if="$BY/$2" bs=2048 count=$(($3 / 2048)) 2>/dev/null | sha256sum | cut -d ' ' -f 1)
+	[ "$sum" = "$4" ] || abort "$2 does not match $1 after writing"
+}
+
+ui_print "postmarketOS for Lenovo TB-7304F"
+
+unzip -o -d /tmp "$ZIP" installer.conf || abort "installer.conf is missing from the zip"
+. /tmp/installer.conf
+
+case "$(getprop ro.product.device)$(getprop ro.build.product)" in
+	*7304*) ;;
+	*) abort "this is not a TB-7304F" ;;
+esac
+for part in boot userdata nvram proinfo; do
+	[ -b "$BY/$part" ] || abort "partition $part not found"
+done
+case "$ZIP" in
+	/data/*|/sdcard/*|/storage/emulated/*)
+		abort "the zip is on userdata, which gets overwritten. Use adb sideload or a microSD card" ;;
+esac
+
+mounted /cache || mount /cache || abort "could not mount /cache for the backups"
+mkdir -p "$BACKUP" || abort "could not create $BACKUP"
+save_part boot stock-boot.img
+save_part nvram nvram.img
+save_part proinfo proinfo.img
+
+if [ ! -s "$BACKUP/data-nvram.tar" ]; then
+	mounted /data || mount /data
+	if [ -d /data/nvram ]; then
+		ui_print "- Saving /data/nvram (Wi-Fi calibration)"
+		tar -c -f "$BACKUP/data-nvram.tar.tmp" -C /data nvram &&
+			mv "$BACKUP/data-nvram.tar.tmp" "$BACKUP/data-nvram.tar" ||
+			ui_print "! Could not save /data/nvram, continuing"
+	else
+		ui_print "! /data/nvram not found, skipping it"
+	fi
+fi
+if mounted /external_sd; then
+	ui_print "- Copying the backups to the microSD card"
+	mkdir -p /external_sd/pmos-backup && cp "$BACKUP"/* /external_sd/pmos-backup/ ||
+		ui_print "! Could not copy the backups to the microSD card"
+fi
+sync
+
+if mounted /data; then
+	umount /data 2>/dev/null || umount -l /data || abort "could not unmount /data"
+fi
+
+write_image rootfs.img userdata "$ROOTFS_BYTES" "$ROOTFS_SHA256"
+write_image boot.img boot "$BOOT_BYTES" "$BOOT_SHA256"
+
+ui_print "Done. Stock boot is in $BACKUP/stock-boot.img"
+exit 0
