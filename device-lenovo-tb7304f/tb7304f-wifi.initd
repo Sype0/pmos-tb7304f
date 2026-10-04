@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="Wi-Fi of the stock kernel (WMT)"
+command="/usr/bin/tb7304f-wifi"
+command_background="true"
+pidfile="/run/tb7304f-wifi.pid"
+
+depend() {
+	need localmount
+	after tb7304f-mdev
+}

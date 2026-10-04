@@ -1,12 +1,12 @@
 # Reference: <https://postmarketos.org/devicepkg>
 pkgname=device-lenovo-tb7304f
 pkgdesc="Lenovo Tab 7 Essential"
-pkgver=2
+pkgver=3
 pkgrel=0
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
-options="!check !archcheck"
+options="!check !archcheck !strip !tracedeps"
 depends="
 	adwaita-icon-theme
 	dbus
@@ -17,10 +17,14 @@ depends="
 	mdev-conf
 	mkbootimg
 	msm-fb-refresher
+	network-manager-applet
+	networkmanager
+	networkmanager-wifi
 	mtk-mkimage
 	onboard
 	postmarketos-base
 	postmarketos-base-downstream
+	wpa_supplicant
 	xf86-input-evdev
 	xf86-video-fbdev
 	xfce4
@@ -40,6 +44,9 @@ source="
 	tb7304f-mdev.initd
 	tb7304f-refresh.initd
 	tb7304f-resize.initd
+	tb7304f-wifi.initd
+	tb7304f-wifi.sh
+	tb7304f-wmt.tar.gz
 	tb7304f-x.initd
 	tb7304f-x.sh
 "
@@ -49,11 +56,16 @@ build() {
 
 package() {
 	devicepkg_package $startdir $pkgname
-	for service in log mdev refresh resize x; do
+	for service in log mdev refresh resize wifi x; do
 		install -Dm755 "$srcdir"/tb7304f-$service.initd \
 			"$pkgdir"/etc/init.d/tb7304f-$service
 	done
 	install -Dm755 "$srcdir"/tb7304f-log.sh "$pkgdir"/usr/bin/tb7304f-log
 	install -Dm755 "$srcdir"/tb7304f-x.sh "$pkgdir"/usr/bin/tb7304f-x
+	install -Dm755 "$srcdir"/tb7304f-wifi.sh "$pkgdir"/usr/bin/tb7304f-wifi
+
+	# The programs of the stock firmware that start the WMT driver, with the
+	# C library they run on, and the firmware of the chip
+	cp -a "$srcdir"/wmt/. "$pkgdir"/
 }
 sha512sums=""

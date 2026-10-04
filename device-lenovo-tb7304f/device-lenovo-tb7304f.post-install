@@ -4,5 +4,7 @@ rc-update add tb7304f-resize boot
 rc-update add dbus default
 rc-update add tb7304f-refresh default
 rc-update add tb7304f-log default
+rc-update add networkmanager default
+rc-update add tb7304f-wifi default
 rc-update add tb7304f-x default
 exit 0
