@@ -35,7 +35,9 @@ save_part() {
 # write_image <file in zip> <partition> <bytes> <sha256>
 write_image() {
 	[ $(($3 % 2048)) = 0 ] || abort "$1 size is not a multiple of 2048"
-	[ "$(blockdev --getsize64 "$BY/$2")" -ge "$3" ] || abort "$1 does not fit $2"
+	# In 512-byte sectors: the shell of the recovery is 32-bit and cannot
+	# compare the size of userdata in bytes
+	[ "$(blockdev --getsz "$BY/$2")" -ge $(($3 / 512)) ] || abort "$1 does not fit $2"
 	ui_print "- Writing $1 to $2"
 	unzip -p "$ZIP" "$1" | dd of="$BY/$2" bs=1048576
 	sync
