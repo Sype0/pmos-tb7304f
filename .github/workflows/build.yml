@@ -23,7 +23,7 @@ jobs:
       - name: Install pmbootstrap
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends kpartx android-sdk-libsparse-utils zip mkbootimg cpio xz-utils e2fsprogs
+          sudo apt-get install -y --no-install-recommends kpartx android-sdk-libsparse-utils zip cpio xz-utils e2fsprogs
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           git clone --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ~/pmbootstrap
           mkdir -p ~/.local/bin
@@ -94,10 +94,8 @@ jobs:
           [ $((blocks * bsize)) -le 3323625472 ] || { echo "rootfs.img does not fit userdata"; exit 1; }
 
           (cd work/initramfs && find . | sort | cpio -o -H newc -R 0:0) | xz --format=lzma -9 > work/initramfs.cpio.lzma
-          mkbootimg --kernel "linux-$DEVICE/kernel" --ramdisk work/initramfs.cpio.lzma \
-            --base 0x40078000 --kernel_offset 0x00008000 --ramdisk_offset 0x04488000 \
-            --tags_offset 0x0df88000 --pagesize 2048 --cmdline "bootopt=64S3,32N2,64N2" \
-            -o work/boot-plain.img
+          python3 tools/mkbootimg.py "linux-$DEVICE/kernel" work/initramfs.cpio.lzma work/boot-plain.img \
+            "bootopt=64S3,32N2,64N2"
           # The bootloader only accepts kernels and ramdisks with MediaTek headers
           python3 tools/mtk_header.py work/boot-plain.img dist/boot.img ROOTFS
           size=$(stat -c %s dist/boot.img)
