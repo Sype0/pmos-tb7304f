@@ -61,14 +61,22 @@ mark() {
 }
 cache mark
 
+# wmt_launcher waits for a property that wmt_loader sets, and there is no
+# Android property service here: this library keeps the properties in files
+# and sends the log of both to stderr
+export LD_PRELOAD=/system/lib64/libtb7304f-props.so
+mkdir -p /run/tb7304f-props
+
 ls -l /dev/wmtdetect /dev/stpwmt /dev/wmtWifi 2>&1
 echo "wmt_loader"
 /vendor/bin/wmt_loader
 echo "wmt_loader: $?"
 ls -l /dev/wmtdetect /dev/stpwmt /dev/wmtWifi 2>&1
+grep . /run/tb7304f-props/* 2>&1
 /vendor/bin/wmt_launcher -p /vendor/firmware/ &
 echo "wmt_launcher: pid $!"
-sleep 5
+unset LD_PRELOAD
+sleep 8
 echo 1 > /dev/wmtWifi
 echo "wmtWifi: $?"
 sleep 5
