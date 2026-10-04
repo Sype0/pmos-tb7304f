@@ -1,0 +1,11 @@
+#!/sbin/openrc-run
+
+description="Xorg on the framebuffer with an Xfce session"
+command="/usr/bin/tb7304f-x"
+command_background="true"
+pidfile="/run/tb7304f-x.pid"
+
+depend() {
+	need localmount dbus
+	after tb7304f-mdev
+}

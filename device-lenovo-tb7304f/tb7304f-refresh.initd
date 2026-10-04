@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+# The display driver only shows a frame when it is told to, which Xorg's
+# fbdev driver never does
+description="Keep the framebuffer on the panel"
+command="/usr/sbin/msm-fb-refresher"
+command_args="--loop"
+command_background="true"
+pidfile="/run/tb7304f-refresh.pid"
+
+depend() {
+	after tb7304f-mdev
+}

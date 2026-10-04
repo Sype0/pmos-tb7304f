@@ -15,8 +15,6 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
-    permissions:
-      contents: write
 
     steps:
       - name: Check out the device packages
@@ -25,7 +23,7 @@ jobs:
       - name: Install pmbootstrap
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends kpartx android-sdk-libsparse-utils zip
+          sudo apt-get install -y --no-install-recommends kpartx android-sdk-libsparse-utils zip mkbootimg cpio xz-utils e2fsprogs
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           git clone --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ~/pmbootstrap
           mkdir -p ~/.local/bin
@@ -39,36 +37,76 @@ jobs:
           set -o pipefail
           test -d "$PMAPORTS/device/testing"
           cp -r "device-$DEVICE" "linux-$DEVICE" "$PMAPORTS/device/testing/"
-          python3 tools/patch-initramfs.py "$PMAPORTS/main/postmarketos-initramfs"
           pmbootstrap config device "$DEVICE"
-          pmbootstrap config ui console
+          pmbootstrap config ui none
           pmbootstrap config service_manager openrc
           pmbootstrap config hostname tb7304f
-          pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE" postmarketos-initramfs
+          pmbootstrap --details-to-stdout checksum "device-$DEVICE" "linux-$DEVICE"
           pmbootstrap config
 
       - name: Build the image
         run: |
-          # install takes the initramfs from the binary repository otherwise
-          pmbootstrap --details-to-stdout build --arch aarch64 postmarketos-initramfs
           pmbootstrap --details-to-stdout install --password 147147
 
       - name: Collect the output
         run: |
           pmbootstrap --details-to-stdout export "$RUNNER_TEMP/export"
           ls -lL "$RUNNER_TEMP/export"
-          mkdir dist
-          cp -vL "$RUNNER_TEMP/export/boot.img" dist/boot.img
-          cp -vL "$RUNNER_TEMP/export/$DEVICE.img" dist/rootfs.img
+          mkdir dist zip work
+          simg2img "$RUNNER_TEMP/export/$DEVICE.img" work/disk.img
+
+          # The image holds a boot and a root partition. Only the root
+          # filesystem is used: it goes to userdata as it is, and the boot
+          # image is put together below.
+          loop=$(sudo losetup -Pf --show work/disk.img)
+          sudo blkid "${loop}p1" "${loop}p2"
+          sudo mkdir -p /mnt/root
+          sudo mount "${loop}p2" /mnt/root
+
+          # The initramfs mounts the root filesystem, and there is no udev to
+          # wait for and no virtual terminal to log in on
+          echo "# The root filesystem is mounted by the initramfs" | sudo tee /mnt/root/etc/fstab
+          sudo find /mnt/root/etc/runlevels -name 'udev*' -print -delete
+          sudo sed -i 's/^tty[0-9]/#&/' /mnt/root/etc/inittab
+          sudo find /mnt/root/etc/runlevels | sort
+          for f in etc/init.d/tb7304f-x usr/bin/Xorg usr/bin/startxfce4 usr/sbin/msm-fb-refresher \
+                   usr/lib/xorg/modules/drivers/fbdev_drv.so usr/lib/xorg/modules/input/evdev_drv.so; do
+            sudo test -e "/mnt/root/$f" || { echo "$f is missing from the root filesystem"; exit 1; }
+          done
+
+          # busybox and its C library for the initramfs
+          mkdir -p work/initramfs/bin work/initramfs/lib work/initramfs/proc work/initramfs/sys work/initramfs/dev
+          sudo cp /mnt/root/bin/busybox work/initramfs/bin/busybox
+          sudo cp -L /mnt/root/lib/ld-musl-aarch64.so.1 work/initramfs/lib/ld-musl-aarch64.so.1
+          sudo chown -R "$USER" work/initramfs
+          install -m 755 initramfs/init work/initramfs/init
+          sudo umount /mnt/root
+
+          sudo e2fsck -fy "${loop}p2" || [ $? -le 1 ]
+          sudo resize2fs -M "${loop}p2"
+          blocks=$(sudo dumpe2fs -h "${loop}p2" 2>/dev/null | awk '/^Block count:/ { print $3 }')
+          bsize=$(sudo dumpe2fs -h "${loop}p2" 2>/dev/null | awk '/^Block size:/ { print $3 }')
+          sudo dd if="${loop}p2" of=zip/rootfs.img bs="$bsize" count="$blocks" status=none
+          sudo chown "$USER" zip/rootfs.img
+          sudo losetup -d "$loop"
+          rm work/disk.img
+          echo "rootfs.img: $((blocks * bsize)) bytes"
+          [ $((blocks * bsize)) -le 3323625472 ] || { echo "rootfs.img does not fit userdata"; exit 1; }
+
+          (cd work/initramfs && find . | sort | cpio -o -H newc -R 0:0) | xz --format=lzma -9 > work/initramfs.cpio.lzma
+          mkbootimg --kernel "linux-$DEVICE/kernel" --ramdisk work/initramfs.cpio.lzma \
+            --base 0x40078000 --kernel_offset 0x00008000 --ramdisk_offset 0x04488000 \
+            --tags_offset 0x0df88000 --pagesize 2048 --cmdline "bootopt=64S3,32N2,64N2" \
+            -o work/boot-plain.img
+          # The bootloader only accepts kernels and ramdisks with MediaTek headers
+          python3 tools/mtk_header.py work/boot-plain.img dist/boot.img ROOTFS
           size=$(stat -c %s dist/boot.img)
           echo "boot.img: $size / 16777216 bytes"
           [ "$size" -le 16777216 ] || { echo "boot.img does not fit the boot partition"; exit 1; }
-          # TWRP flashable zip: raw (not sparse) root filesystem for userdata + boot.img
-          mkdir zip
+
+          # TWRP flashable zip: the root filesystem for userdata and boot.img
           cp -r installer/META-INF zip/
           cp dist/boot.img zip/boot.img
-          simg2img dist/rootfs.img zip/rootfs.img
-          rm dist/rootfs.img
           for f in boot rootfs; do
             bytes=$(stat -c %s "zip/$f.img")
             [ $((bytes % 2048)) = 0 ] || { echo "$f.img size is not a multiple of 2048"; exit 1; }
@@ -85,14 +123,3 @@ jobs:
         with:
           name: postmarketos-lenovo-tb7304f
           path: dist/*
-
-      - name: Publish the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "build-${{ github.run_number }}" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "postmarketOS for TB-7304F (build ${{ github.run_number }})" \
-            --notes "Untested on the device. Flashing the zip in TWRP overwrites userdata (all Android data) and boot. Stock boot, nvram, proinfo and /data/nvram are saved to /cache/pmos-backup first. The zip must not be on internal storage: use adb sideload or a microSD card. Login: user / 147147."

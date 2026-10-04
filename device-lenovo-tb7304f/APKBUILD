@@ -1,35 +1,59 @@
 # Reference: <https://postmarketos.org/devicepkg>
 pkgname=device-lenovo-tb7304f
 pkgdesc="Lenovo Tab 7 Essential"
-pkgver=1
+pkgver=2
 pkgrel=0
 url="https://postmarketos.org"
 license="MIT"
 arch="aarch64"
 options="!check !archcheck"
 depends="
+	adwaita-icon-theme
+	dbus
+	dbus-x11
+	e2fsprogs-extra
+	font-dejavu
 	linux-lenovo-tb7304f
+	mdev-conf
 	mkbootimg
+	msm-fb-refresher
 	mtk-mkimage
+	onboard
 	postmarketos-base
 	postmarketos-base-downstream
+	xf86-input-evdev
+	xf86-video-fbdev
+	xfce4
+	xfce4-terminal
+	xhost
+	xinit
+	xorg-server
+	xset
 "
 makedepends="devicepkg-dev"
 install="$pkgname.post-install"
 source="
 	deviceinfo
 	kernel-cmdline.conf
+	tb7304f-log.initd
+	tb7304f-log.sh
 	tb7304f-mdev.initd
+	tb7304f-refresh.initd
+	tb7304f-resize.initd
+	tb7304f-x.initd
+	tb7304f-x.sh
 "
-
 build() {
 	devicepkg_build $startdir $pkgname
 }
 
 package() {
 	devicepkg_package $startdir $pkgname
-	install -Dm755 "$srcdir"/tb7304f-mdev.initd \
-		"$pkgdir"/etc/init.d/tb7304f-mdev
+	for service in log mdev refresh resize x; do
+		install -Dm755 "$srcdir"/tb7304f-$service.initd \
+			"$pkgdir"/etc/init.d/tb7304f-$service
+	done
+	install -Dm755 "$srcdir"/tb7304f-log.sh "$pkgdir"/usr/bin/tb7304f-log
+	install -Dm755 "$srcdir"/tb7304f-x.sh "$pkgdir"/usr/bin/tb7304f-x
 }
-
 sha512sums=""

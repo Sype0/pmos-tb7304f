@@ -1,0 +1,10 @@
+#!/sbin/openrc-run
+
+description="Save the logs of this boot to the cache partition"
+command="/usr/bin/tb7304f-log"
+command_background="true"
+pidfile="/run/tb7304f-log.pid"
+
+depend() {
+	need localmount
+}

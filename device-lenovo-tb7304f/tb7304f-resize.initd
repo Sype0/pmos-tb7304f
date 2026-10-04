@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+description="Grow the root filesystem to the size of userdata"
+
+depend() {
+	need localmount
+}
+
+start() {
+	[ -e /var/lib/tb7304f-resized ] && return 0
+	root=$(awk '$2 == "/" { print $1; exit }' /proc/mounts)
+	ebegin "Growing the root filesystem on $root"
+	resize2fs "$root" && touch /var/lib/tb7304f-resized
+	eend $?
+}
