@@ -29,6 +29,18 @@ TOUCH=$(input mtk-tpd)
 KEYS=$(input mtk-kpd)
 echo "touch=$TOUCH keys=$KEYS"
 
+# The panel is 600x1024, upright. /etc/tb7304f-rotation turns the picture:
+# cw and ccw for landscape, ud for upside down, normal for upright. The fbdev
+# driver rotates what it draws, and the touchscreen gets the matching matrix.
+ROTATION=$(cat /etc/tb7304f-rotation 2>/dev/null)
+case "${ROTATION:-cw}" in
+	cw) ROTATE=CW; MATRIX="0 1 0 -1 0 1 0 0 1" ;;
+	ccw) ROTATE=CCW; MATRIX="0 -1 1 1 0 0 0 0 1" ;;
+	ud) ROTATE=UD; MATRIX="-1 0 1 0 -1 1 0 0 1" ;;
+	*) ROTATE=""; MATRIX="1 0 0 0 1 0 0 0 1" ;;
+esac
+echo "rotation=${ROTATION:-cw}"
+
 mkdir -p /etc/X11/xorg.conf.d
 {
 	cat <<EOF
@@ -46,6 +58,7 @@ Section "Device"
 	Identifier "framebuffer"
 	Driver "fbdev"
 	Option "fbdev" "/dev/fb0"
+$([ -n "$ROTATE" ] && echo "	Option \"Rotate\" \"$ROTATE\"")
 EndSection
 
 Section "Screen"
@@ -61,6 +74,7 @@ Section "InputDevice"
 	Identifier "touchscreen"
 	Driver "evdev"
 	Option "Device" "$TOUCH"
+	Option "TransformationMatrix" "$MATRIX"
 EndSection
 EOF
 		layout="$layout	InputDevice \"touchscreen\" \"CorePointer\"

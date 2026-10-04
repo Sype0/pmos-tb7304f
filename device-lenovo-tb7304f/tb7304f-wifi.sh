@@ -21,8 +21,10 @@ mkdir -p /run/tb7304f-wifi-cache
 cache() {
 	mount -t ext4 "$CACHE" /run/tb7304f-wifi-cache || return 1
 	"$@"
+	rc=$?
 	sync
 	umount /run/tb7304f-wifi-cache
+	return $rc
 }
 
 # The driver may take the kernel down. If the last attempt did not get to the
