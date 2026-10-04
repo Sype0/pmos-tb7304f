@@ -93,8 +93,38 @@ fi
 udevadm trigger --type=devices --subsystem-match=net --action=add
 udevadm settle --timeout=15
 echo "udev: $?"
-sleep 5
-nmcli device 2>&1
+udevadm info /sys/class/net/wlan0 2>&1
+
+# NetworkManager was started before udev knew anything: let it look again
+rc-service networkmanager restart 2>&1
+sleep 10
+
+# nm_device: the state of every device, and wlan0 is taken under management
+# if it was left out
+NM=org.freedesktop.NetworkManager
+for dev in $(gdbus call --system --dest $NM --object-path /org/freedesktop/NetworkManager \
+		--method $NM.GetAllDevices 2>&1 | grep -o "/org/freedesktop/NetworkManager/Devices/[0-9]*"); do
+	props=$(gdbus call --system --dest $NM --object-path "$dev" \
+		--method org.freedesktop.DBus.Properties.GetAll $NM.Device 2>&1)
+	iface=$(echo "$props" | grep -o "'Interface': <'[^']*'>")
+	echo "$dev $iface $(echo "$props" | grep -o "'Managed': <[a-z]*>") $(echo "$props" | grep -o "'State': <uint32 [0-9]*>") $(echo "$props" | grep -o "'StateReason': <([^)]*)>") $(echo "$props" | grep -o "'DeviceType': <uint32 [0-9]*>")"
+	case "$iface" in
+	*wlan0*)
+		case "$props" in
+		*"'Managed': <false>"*)
+			echo "taking wlan0 under management"
+			gdbus call --system --dest $NM --object-path "$dev" \
+				--method org.freedesktop.DBus.Properties.Set $NM.Device Managed "<true>" 2>&1
+			sleep 5
+			gdbus call --system --dest $NM --object-path "$dev" \
+				--method org.freedesktop.DBus.Properties.GetAll $NM.Device 2>&1 |
+				grep -o "'Managed': <[a-z]*>\|'State': <uint32 [0-9]*>\|'StateReason': <([^)]*)>"
+			;;
+		esac
+		;;
+	esac
+done
+ls -l /run/udev/data 2>&1 | head -20
 
 cache rm -f /run/tb7304f-wifi-cache/pmos-log/wifi-attempt
 echo "done"

@@ -1,7 +1,7 @@
 # Reference: <https://postmarketos.org/devicepkg>
 pkgname=device-lenovo-tb7304f
 pkgdesc="Lenovo Tab 7 Essential"
-pkgver=6
+pkgver=7
 pkgrel=0
 url="https://postmarketos.org"
 license="MIT"
@@ -45,6 +45,7 @@ source="
 	tb7304f-log.initd
 	tb7304f-log.sh
 	tb7304f-mdev.initd
+	tb7304f-networkmanager.conf
 	tb7304f-refresh.initd
 	tb7304f-resize.initd
 	tb7304f-touch.desktop
@@ -69,6 +70,8 @@ package() {
 	install -Dm755 "$srcdir"/tb7304f-x.sh "$pkgdir"/usr/bin/tb7304f-x
 	install -Dm755 "$srcdir"/tb7304f-wifi.sh "$pkgdir"/usr/bin/tb7304f-wifi
 	install -Dm755 "$srcdir"/tb7304f-touch.sh "$pkgdir"/usr/bin/tb7304f-touch
+	install -Dm644 "$srcdir"/tb7304f-networkmanager.conf \
+		"$pkgdir"/etc/NetworkManager/conf.d/10-tb7304f.conf
 	install -Dm644 "$srcdir"/tb7304f-touch.desktop \
 		"$pkgdir"/etc/xdg/autostart/tb7304f-touch.desktop
 
