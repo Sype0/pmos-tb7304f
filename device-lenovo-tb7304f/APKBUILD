@@ -1,7 +1,7 @@
 # Reference: <https://postmarketos.org/devicepkg>
 pkgname=device-lenovo-tb7304f
 pkgdesc="Lenovo Tab 7 Essential"
-pkgver=5
+pkgver=6
 pkgrel=0
 url="https://postmarketos.org"
 license="MIT"
@@ -21,6 +21,7 @@ depends="
 	msm-fb-refresher
 	network-manager-applet
 	networkmanager
+	networkmanager-cli
 	networkmanager-wifi
 	mtk-mkimage
 	onboard

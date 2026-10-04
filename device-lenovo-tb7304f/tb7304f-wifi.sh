@@ -62,25 +62,39 @@ mark() {
 cache mark
 
 # wmt_launcher waits for a property that wmt_loader sets, and there is no
-# Android property service here: this library keeps the properties in files
-# and sends the log of both to stderr
-export LD_PRELOAD=/system/lib64/libtb7304f-props.so
+# Android property service here: this library, preloaded into the two, keeps
+# the properties in files and sends their log to stderr
+PRELOAD=/system/lib64/libtb7304f-props.so
 mkdir -p /run/tb7304f-props
 
 ls -l /dev/wmtdetect /dev/stpwmt /dev/wmtWifi 2>&1
 echo "wmt_loader"
-/vendor/bin/wmt_loader
+LD_PRELOAD=$PRELOAD /vendor/bin/wmt_loader
 echo "wmt_loader: $?"
 ls -l /dev/wmtdetect /dev/stpwmt /dev/wmtWifi 2>&1
 grep . /run/tb7304f-props/* 2>&1
-/vendor/bin/wmt_launcher -p /vendor/firmware/ &
-echo "wmt_launcher: pid $!"
-unset LD_PRELOAD
+LD_PRELOAD=$PRELOAD /vendor/bin/wmt_launcher -p /vendor/firmware/ 2>&1 |
+	grep -v "fwlog.status\|dynamic.dump" &
+echo "wmt_launcher started"
 sleep 8
 echo 1 > /dev/wmtWifi
 echo "wmtWifi: $?"
 sleep 5
 ip link 2>&1
+
+# NetworkManager leaves a device alone until udev has announced it. udev is
+# not running on this system (the kernel has no devtmpfs, mdev fills /dev),
+# so it is started here for its database only and told about the network
+# devices.
+if ! pidof udevd > /dev/null; then
+	udevd --daemon
+	sleep 1
+fi
+udevadm trigger --type=devices --subsystem-match=net --action=add
+udevadm settle --timeout=15
+echo "udev: $?"
+sleep 5
+nmcli device 2>&1
 
 cache rm -f /run/tb7304f-wifi-cache/pmos-log/wifi-attempt
 echo "done"
