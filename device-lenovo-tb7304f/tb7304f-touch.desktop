@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Touch settings and on-screen keyboard
+Exec=/usr/bin/tb7304f-touch
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
